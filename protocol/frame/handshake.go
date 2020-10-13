@@ -7,8 +7,8 @@ import (
 const (
 	// StreamID + Length uint16 + Reserved uint8 + MD5 Hash (128-bit)
 	HandshakeBaseSize = StreamIDSize + 19
-	// StreamID + Size uint8
-	HandshakeAckBaseSize = StreamIDSize + 1
+	// StreamID + Size uint16
+	HandshakeAckBaseSize = StreamIDSize + 2
 	// The default padding size for the handshake.
 	HandshakeDefaultPaddingSize = FrameDataMaxSize - HandshakeBaseSize
 )
@@ -63,8 +63,8 @@ func (h Handshake) Bytes() []byte {
 // Handshake ACK frame is the first frame to send back to the peer.
 type HandshakeAck struct {
 	StreamID
-	// The size of data we could receive in a single frame.
-	Size uint8
+	// The size of data we can receive in a single frame.
+	Size uint16
 }
 
 func DecodeHandshakeAck(b []byte) (*HandshakeAck, error) {
@@ -75,7 +75,7 @@ func DecodeHandshakeAck(b []byte) (*HandshakeAck, error) {
 	if err != nil {
 		return nil, err
 	}
-	size := uint8(b[2])
+	size := BytesToUint16(b[2:])
 	return &HandshakeAck{sid, size}, nil
 }
 
@@ -86,6 +86,6 @@ func (HandshakeAck) Type() FrameType {
 func (ha HandshakeAck) Bytes() []byte {
 	var buf bytes.Buffer
 	buf.Write(ha.StreamID.Bytes())
-	buf.WriteByte(byte(ha.Size))
+	buf.Write(Uint16ToBytes(ha.Size))
 	return buf.Bytes()
 }
