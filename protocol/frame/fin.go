@@ -6,14 +6,20 @@ package frame
 // such as by implementing a timeout behavior when the peer fails to receive ACK frames in
 // a certain period of time.
 //
-// Non-zero value indicates the stream to close, while zero value indicates that the whole
-// underlying connection should be closed.
-type Fin uint16
-
-func (f Fin) Type() FrameType {
-	return FinType
+// Non-zero value indicates the stream to close,
+// while zero value indicates that the whole underlying connection to close.
+type Fin struct {
+	StreamID
 }
 
-func (f Fin) Bytes() []byte {
-	return Uint16ToBytes(uint16(f))
+func DecodeFin(b []byte) (*Fin, error) {
+	sid, err := DecodeStreamID(b)
+	if err != nil {
+		return nil, err
+	}
+	return &Fin{sid}, nil
+}
+
+func (Fin) Type() FrameType {
+	return FinType
 }

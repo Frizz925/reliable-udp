@@ -20,7 +20,7 @@ func TestHandshake(t *testing.T) {
 		data := "Hello, world!"
 		hash := BytesToMD5Hash([]byte(data))
 
-		expected := &Handshake{
+		expected := Handshake{
 			Length:   uint16(len(data)),
 			Reserved: 0,
 			Hash:     hash,

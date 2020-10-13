@@ -18,7 +18,7 @@ func TestStream(t *testing.T) {
 
 	// Test encode/decode corectness
 	{
-		expected := &Stream{
+		expected := Stream{
 			Sequence: 5,
 			Offset:   10,
 			Chunk:    []byte(data),

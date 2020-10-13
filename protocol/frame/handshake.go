@@ -5,14 +5,17 @@ import (
 )
 
 const (
-	// Length uint16 + Reserved uint8 + MD5 Hash (128-bit)
-	HandshakeBaseSize = 19
+	// StreamID + Length uint16 + Reserved uint8 + MD5 Hash (128-bit)
+	HandshakeBaseSize = StreamIDSize + 19
+	// StreamID + Size uint8
+	HandshakeAckBaseSize = StreamIDSize + 1
 	// The default padding size for the handshake.
 	HandshakeDefaultPaddingSize = FrameDataMaxSize - HandshakeBaseSize
 )
 
 // Handshake frame is the first frame to send to a peer to start the information exchange
 type Handshake struct {
+	StreamID
 	// How much data the peer should receive in a single stream.
 	Length uint16
 	// Reserved for hash related information.
@@ -30,20 +33,26 @@ func DecodeHandshake(b []byte) (*Handshake, error) {
 	if length < HandshakeBaseSize {
 		return nil, ErrBufferUnderflow
 	}
+	sid, err := DecodeStreamID(b)
+	if err != nil {
+		return nil, err
+	}
 	return &Handshake{
-		Length:   BytesToUint16(b[:2]),
-		Reserved: b[2],
-		Hash:     b[3:19],
+		StreamID: sid,
+		Length:   BytesToUint16(b[2:]),
+		Reserved: b[4],
+		Hash:     b[5:HandshakeBaseSize],
 		Padding:  length - HandshakeBaseSize,
 	}, nil
 }
 
-func (*Handshake) Type() FrameType {
+func (Handshake) Type() FrameType {
 	return HandshakeType
 }
 
-func (h *Handshake) Bytes() []byte {
+func (h Handshake) Bytes() []byte {
 	var buf bytes.Buffer
+	buf.Write(h.StreamID.Bytes())
 	buf.Write(Uint16ToBytes(h.Length))
 	buf.WriteByte(h.Reserved)
 	buf.Write(h.Hash)
@@ -52,13 +61,31 @@ func (h *Handshake) Bytes() []byte {
 }
 
 // Handshake ACK frame is the first frame to send back to the peer.
-// The ACK frame is used to inform the peer how much data we could receive in a single packet.
-type HandshakeAck uint8
+type HandshakeAck struct {
+	StreamID
+	// The size of data we could receive in a single frame.
+	Size uint8
+}
+
+func DecodeHandshakeAck(b []byte) (*HandshakeAck, error) {
+	if len(b) < HandshakeAckBaseSize {
+		return nil, ErrBufferUnderflow
+	}
+	sid, err := DecodeStreamID(b)
+	if err != nil {
+		return nil, err
+	}
+	size := uint8(b[2])
+	return &HandshakeAck{sid, size}, nil
+}
 
 func (HandshakeAck) Type() FrameType {
 	return HandshakeAckType
 }
 
 func (ha HandshakeAck) Bytes() []byte {
-	return []byte{byte(ha)}
+	var buf bytes.Buffer
+	buf.Write(ha.StreamID.Bytes())
+	buf.WriteByte(byte(ha.Size))
+	return buf.Bytes()
 }

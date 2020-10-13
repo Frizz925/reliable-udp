@@ -3,14 +3,33 @@ package frame
 import "bytes"
 
 const (
-	// Sequence uint16 + Offset uint16 + Length uint16
-	StreamBaseSize = 6
+	// uint16
+	StreamIDSize = 2
+	// StreamID + Sequence uint16 + Offset uint16 + Length uint16
+	StreamBaseSize = StreamIDSize + 6
+	// StreamID + Sequence uint16
+	StreamAckBaseSize = StreamIDSize + 2
 	// Maximum size for the data chunk in a single frame.
 	StreamChunkMaxSize = FrameDataMaxSize - StreamBaseSize
 )
 
+// Stream ID is used for multiplexing purposes between streams in a single connection.
+type StreamID uint16
+
+func DecodeStreamID(b []byte) (StreamID, error) {
+	if len(b) < StreamIDSize {
+		return 0, ErrBufferUnderflow
+	}
+	return StreamID(BytesToUint16(b)), nil
+}
+
+func (sid StreamID) Bytes() []byte {
+	return Uint16ToBytes(uint16(sid))
+}
+
 // Stream frames are chunks of data being sent over the wire, providing stream of data.
 type Stream struct {
+	StreamID
 	// The sequence of the stream packet on the wire.
 	Sequence uint16
 	// The data chunk offset in a stream.
@@ -23,31 +42,34 @@ func DecodeStream(b []byte) (*Stream, error) {
 	if len(b) < StreamBaseSize {
 		return nil, ErrBufferUnderflow
 	}
-	chunk := b[6:]
-	length := int(BytesToUint16(b[4:6]))
+	sid, err := DecodeStreamID(b)
+	if err != nil {
+		return nil, err
+	}
+	seq := BytesToUint16(b[2:])
+	off := BytesToUint16(b[4:])
+	length := int(BytesToUint16(b[6:]))
+	chunk := b[8:]
 	if len(chunk) < length {
 		return nil, ErrBufferUnderflow
 	}
-	return &Stream{
-		Sequence: BytesToUint16(b[:2]),
-		Offset:   BytesToUint16(b[2:4]),
-		Chunk:    chunk,
-	}, nil
+	return &Stream{sid, seq, off, chunk}, nil
 }
 
-func (s *Stream) Length() int {
+func (s Stream) Length() int {
 	if s.Chunk != nil {
 		return len(s.Chunk)
 	}
 	return 0
 }
 
-func (*Stream) Type() FrameType {
+func (Stream) Type() FrameType {
 	return StreamType
 }
 
-func (s *Stream) Bytes() []byte {
+func (s Stream) Bytes() []byte {
 	var buf bytes.Buffer
+	buf.Write(s.StreamID.Bytes())
 	buf.Write(Uint16ToBytes(s.Sequence))
 	buf.Write(Uint16ToBytes(s.Offset))
 	if s.Chunk != nil {
@@ -60,14 +82,32 @@ func (s *Stream) Bytes() []byte {
 	return buf.Bytes()
 }
 
-// Stream ACK frames are ACK frames to inform the peer that the we peer have successfully
-// received the chunk packet. It indicates which packet sequence that we have received.
-type StreamAck uint16
+// Stream ACK frames are ACK frames to inform the peer that the we peer have successfully received the chunk packet.
+type StreamAck struct {
+	StreamID
+	// Indicates which packet sequence that we have received.
+	Sequence uint16
+}
+
+func DecodeStreamAck(b []byte) (*StreamAck, error) {
+	if len(b) < StreamAckBaseSize {
+		return nil, ErrBufferUnderflow
+	}
+	sid, err := DecodeStreamID(b)
+	if err != nil {
+		return nil, err
+	}
+	seq := BytesToUint16(b[2:])
+	return &StreamAck{sid, seq}, nil
+}
 
 func (StreamAck) Type() FrameType {
 	return StreamAckType
 }
 
 func (sa StreamAck) Bytes() []byte {
-	return Uint16ToBytes(uint16(sa))
+	var buf bytes.Buffer
+	buf.Write(sa.StreamID.Bytes())
+	buf.Write(Uint16ToBytes(sa.Sequence))
+	return buf.Bytes()
 }
