@@ -35,12 +35,24 @@ func DecodeStream(b []byte) (*Stream, error) {
 	}, nil
 }
 
+func (s *Stream) Length() int {
+	if s.Chunk != nil {
+		return len(s.Chunk)
+	}
+	return 0
+}
+
+func (*Stream) Type() FrameType {
+	return StreamType
+}
+
 func (s *Stream) Bytes() []byte {
 	var buf bytes.Buffer
 	buf.Write(Uint16ToBytes(s.Sequence))
 	buf.Write(Uint16ToBytes(s.Offset))
 	if s.Chunk != nil {
-		buf.Write(Uint16ToBytes(len(s.Chunk)))
+		clen := uint16(s.Length())
+		buf.Write(Uint16ToBytes(clen))
 		buf.Write(s.Chunk)
 	} else {
 		buf.Write(Uint16ToBytes(0))
@@ -51,3 +63,11 @@ func (s *Stream) Bytes() []byte {
 // Stream ACK frames are ACK frames to inform the peer that the we peer have successfully
 // received the chunk packet. It indicates which packet sequence that we have received.
 type StreamAck uint16
+
+func (StreamAck) Type() FrameType {
+	return StreamAckType
+}
+
+func (sa StreamAck) Bytes() []byte {
+	return Uint16ToBytes(uint16(sa))
+}

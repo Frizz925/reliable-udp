@@ -9,3 +9,11 @@ package frame
 // Non-zero value indicates the stream to close, while zero value indicates that the whole
 // underlying connection should be closed.
 type Fin uint16
+
+func (f Fin) Type() FrameType {
+	return FinType
+}
+
+func (f Fin) Bytes() []byte {
+	return Uint16ToBytes(uint16(f))
+}
