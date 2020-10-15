@@ -9,38 +9,24 @@ import (
 
 func TestObservable(t *testing.T) {
 	require := require.New(t)
-	observable := New()
 	expected := "Hello, world!"
+	observable := New()
 
-	obs := []*Observer{
-		observable.Observe(),
-		observable.Observe(),
-	}
-
-	go observable.Dispatch(expected)
-	for _, ob := range obs {
-		assertNext(require, ob.Next(), expected)
-		assertTimeout(require, ob.Next())
-	}
-
-	ob1, ob2 := obs[0], obs[1]
-	ob2.Close()
-
-	go observable.Dispatch(expected)
-	assertNext(require, ob1.Next(), expected)
-	assertDone(require, ob2.Next(), ob2.Done())
-
-	ch := make(chan interface{})
-	dispose := observable.ObserveFunc(func(ob *Observer, v interface{}) {
+	ob := observable.Observe()
+	ch := make(chan interface{}, 1)
+	done := make(chan struct{}, 1)
+	ob.HandleFunc(func(ob *Observer, v interface{}) {
 		ch <- v
+	}, func(*Observer) {
+		close(done)
 	})
 
-	go observable.Dispatch(expected)
+	observable.Dispatch(expected)
 	assertNext(require, ch, expected)
 
-	dispose()
-	go observable.Dispatch(expected)
-	assertTimeout(require, ch)
+	ob.Dispose()
+	observable.Dispatch(expected)
+	assertDone(require, ch, done)
 }
 
 func assertNext(require *require.Assertions, ch <-chan interface{}, expected string) {
@@ -53,22 +39,13 @@ func assertNext(require *require.Assertions, ch <-chan interface{}, expected str
 	}
 }
 
-func assertTimeout(require *require.Assertions, ch <-chan interface{}) {
-	timeout := time.After(100 * time.Millisecond)
-	select {
-	case v := <-ch:
-		require.Nil(v, "Expected not to receive the next value")
-	case <-timeout:
-	}
-}
-
 func assertDone(require *require.Assertions, ch <-chan interface{}, done <-chan struct{}) {
 	timeout := time.After(100 * time.Millisecond)
 	select {
-	case v := <-ch:
-		require.Nil(v, "Expected not to receive the next value")
-	case <-timeout:
-		require.Fail("Timeout while receiving next value")
 	case <-done:
+	case <-ch:
+		require.Fail("Expected not to receive any new value")
+	case <-timeout:
+		require.Fail("Timeout while disposing")
 	}
 }

@@ -23,6 +23,14 @@ func DecodeStreamID(b []byte) (StreamID, error) {
 	return StreamID(BytesToUint16(b)), nil
 }
 
+func (sid StreamID) Int() int {
+	return int(sid)
+}
+
+func (sid StreamID) Uint16() uint16 {
+	return uint16(sid)
+}
+
 func (sid StreamID) Bytes() []byte {
 	return Uint16ToBytes(uint16(sid))
 }

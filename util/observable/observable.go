@@ -4,14 +4,13 @@ import (
 	"sync"
 )
 
-type ObserveFunc func(*Observer, interface{})
-
 type DisposeFunc func()
 
 type Observable struct {
 	mu        sync.RWMutex
 	observers map[int]*Observer
 	nextId    int
+	disposed  bool
 }
 
 func New() *Observable {
@@ -23,39 +22,37 @@ func New() *Observable {
 func (o *Observable) Observe() *Observer {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if o.disposed {
+		return nil
+	}
 	o.nextId++
 	ob := NewObserver(o, o.nextId)
 	o.observers[ob.id] = ob
 	return ob
 }
 
-func (o *Observable) ObserveFunc(handler ObserveFunc) DisposeFunc {
-	ob := o.Observe()
-	go observe(ob, handler)
-	return ob.Close
-}
-
 func (o *Observable) Dispatch(i interface{}) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
-	for _, ob := range o.observers {
-		ob.Dispatch(i)
+	if o.disposed {
+		return
 	}
+	for _, ob := range o.observers {
+		ob.dispatch(i)
+	}
+}
+
+func (o *Observable) Dispose() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, ob := range o.observers {
+		ob.dispose(false)
+	}
+	o.observers = nil
 }
 
 func (o *Observable) remove(id int) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	delete(o.observers, id)
-}
-
-func observe(ob *Observer, handler ObserveFunc) {
-	for {
-		select {
-		case v := <-ob.Next():
-			handler(ob, v)
-		case <-ob.Done():
-			return
-		}
-	}
 }

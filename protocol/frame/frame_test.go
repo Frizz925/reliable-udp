@@ -48,8 +48,7 @@ func TestFrame(t *testing.T) {
 			Chunk:    []byte("Hello, world!"),
 		}
 
-		f := Frame{expected}
-		d, err := Decode(f.Bytes())
+		d, err := Decode(Encode(expected))
 		require.Nil(err)
 		actual, ok := d.Data.(*Stream)
 		require.True(ok)

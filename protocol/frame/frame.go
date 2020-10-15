@@ -58,6 +58,18 @@ type Frame struct {
 	Data
 }
 
+func New(data Data) Frame {
+	return Frame{data}
+}
+
+func Buffer() []byte {
+	return make([]byte, FrameMaxSize)
+}
+
+func Encode(data Data) []byte {
+	return New(data).Bytes()
+}
+
 func Decode(b []byte) (*Frame, error) {
 	if len(b) < FrameBaseSize {
 		return nil, ErrBufferUnderflow

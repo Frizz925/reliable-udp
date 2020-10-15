@@ -2,7 +2,9 @@ package wire
 
 import (
 	"errors"
+	"io"
 	"net"
+	"reliable-udp/protocol/wire/interop"
 	"sync"
 )
 
@@ -12,14 +14,27 @@ var (
 )
 
 type Listener struct {
-	conn  *net.UDPConn
-	mu    sync.Mutex
-	peers map[string]*Peer
-	open  bool
+	conn    *net.UDPConn
+	interop *interop.Interop
+	mu      sync.Mutex
+	peers   map[string]*Peer
+	open    bool
 }
 
 func NewListener() *Listener {
 	return &Listener{}
+}
+
+func Listen(addr string) (*Listener, error) {
+	l := NewListener()
+	laddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	if err := l.Open(laddr); err != nil {
+		return nil, err
+	}
+	return l, nil
 }
 
 func (l *Listener) Open(laddr *net.UDPAddr) error {
@@ -33,6 +48,7 @@ func (l *Listener) Open(laddr *net.UDPAddr) error {
 		return err
 	}
 	l.conn = conn
+	l.interop = interop.New(conn)
 	l.peers = make(map[string]*Peer)
 	l.open = true
 	return nil
@@ -45,7 +61,7 @@ func (l *Listener) Close() error {
 		return ErrListenerNotOpen
 	}
 	for _, peer := range l.peers {
-		if err := peer.close(); err != nil {
+		if err := peer.close(false); err != nil {
 			return err
 		}
 	}
@@ -53,9 +69,19 @@ func (l *Listener) Close() error {
 		return err
 	}
 	l.conn = nil
+	l.interop = nil
 	l.peers = nil
 	l.open = false
 	return nil
+}
+
+func (l *Listener) Accept() (*Peer, error) {
+	a := l.interop.Accept()
+	if a == nil {
+		return nil, io.EOF
+	}
+	addr := a.RemoteAddr().String()
+	return l.Peer(addr)
 }
 
 func (l *Listener) Peer(addr string) (*Peer, error) {
@@ -66,15 +92,11 @@ func (l *Listener) Peer(addr string) (*Peer, error) {
 	}
 	p, ok := l.peers[addr]
 	if !ok {
-		laddr := l.LocalAddr()
 		raddr, err := net.ResolveUDPAddr("udp", addr)
 		if err != nil {
 			return nil, err
 		}
-		p = NewPeer(l, addr)
-		if err := p.open(laddr, raddr); err != nil {
-			return nil, err
-		}
+		p = NewPeer(l, l.interop.Peer(raddr))
 		l.peers[addr] = p
 	}
 	return p, nil

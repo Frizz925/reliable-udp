@@ -2,7 +2,8 @@ package wire
 
 import (
 	"errors"
-	"net"
+	"reliable-udp/protocol/frame"
+	"reliable-udp/protocol/wire/interop"
 	"sync"
 )
 
@@ -12,57 +13,39 @@ var (
 
 type Peer struct {
 	listener *Listener
-	addr     string
-	interop  *Interop
+	interop  *interop.Peer
 	mu       sync.Mutex
-	streams  map[uint32]*Stream
-	nextId   uint32
+	streams  map[frame.StreamID]*Stream
+	nextId   frame.StreamID
 	closed   bool
 }
 
-func NewPeer(l *Listener, addr string) *Peer {
+func NewPeer(l *Listener, p *interop.Peer) *Peer {
 	return &Peer{
 		listener: l,
-		addr:     addr,
-		streams:  make(map[uint32]*Stream),
-		nextId:   0,
-		closed:   false,
+		interop:  p,
+		streams:  make(map[frame.StreamID]*Stream),
 	}
 }
 
 func (p *Peer) Close() error {
-	if err := p.close(); err != nil {
-		return err
-	}
-	p.listener.remove(p.addr)
-	return nil
+	return p.close(true)
 }
 
 func (p *Peer) Stream() *Stream {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.nextId++
-	id := p.nextId
-	s, ok := p.streams[id]
+	sid := p.nextId
+	s, ok := p.streams[sid]
 	if !ok {
-		s = NewStream(p, id)
-		p.streams[id] = s
+		s = NewStream(p, p.interop.Stream(sid))
+		p.streams[sid] = s
 	}
 	return s
 }
 
-func (p *Peer) open(laddr *net.UDPAddr, raddr *net.UDPAddr) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	conn, err := net.DialUDP("udp", laddr, raddr)
-	if err != nil {
-		return err
-	}
-	p.interop = NewInterop(conn)
-	return nil
-}
-
-func (p *Peer) close() error {
+func (p *Peer) close(remove bool) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
@@ -73,8 +56,14 @@ func (p *Peer) close() error {
 			return err
 		}
 	}
-	if err := p.interop.Close(); err != nil {
-		return err
+	if !p.interop.Closed() {
+		if err := p.interop.Close(); err != nil {
+			return err
+		}
+	}
+	if remove {
+		addr := p.interop.RemoteAddr().String()
+		p.listener.remove(addr)
 	}
 	p.listener = nil
 	p.streams = nil
@@ -83,8 +72,8 @@ func (p *Peer) close() error {
 	return nil
 }
 
-func (p *Peer) remove(id uint32) {
+func (p *Peer) remove(sid frame.StreamID) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	delete(p.streams, id)
+	delete(p.streams, sid)
 }
