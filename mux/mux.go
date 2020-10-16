@@ -2,69 +2,86 @@ package mux
 
 import (
 	"errors"
+	"io"
 	"net"
 	"reliable-udp/mux/frame"
 	"sync"
-
-	log "github.com/sirupsen/logrus"
 )
 
-const peerAcceptBacklog = 512
+const (
+	packetBufferSize     = 65535
+	sessionAcceptBacklog = 512
+)
 
 var ErrMuxClosed = errors.New("mux closed")
 
 type Mux struct {
-	conn  UDPConn
-	peers map[string]*Peer
+	conn     *net.UDPConn
+	sessions map[string]*Session
+
+	acceptCh chan *Session
+	errorCh  chan error
+	die      chan struct{}
 
 	mu  sync.RWMutex
 	amu sync.Mutex
-	wmu sync.Mutex
-
-	acceptCh chan Packet
-	errorCh  chan error
 
 	closed bool
 }
 
-func New(conn UDPConn) *Mux {
+func New(laddr *net.UDPAddr) (*Mux, error) {
+	conn, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		return nil, err
+	}
 	m := &Mux{
 		conn:     conn,
-		peers:    make(map[string]*Peer),
-		acceptCh: make(chan Packet, peerAcceptBacklog),
+		sessions: make(map[string]*Session),
+		acceptCh: make(chan *Session, sessionAcceptBacklog),
 		errorCh:  make(chan error, 1),
+		die:      make(chan struct{}),
 	}
-	go m.listen()
-	return m
+	go m.recv()
+	return m, nil
 }
 
-func (m *Mux) Accept() (*Peer, error) {
+func (m *Mux) LocalAddr() *net.UDPAddr {
+	return m.conn.LocalAddr().(*net.UDPAddr)
+}
+
+func (m *Mux) Accept() (*Session, error) {
 	if err := m.errIfClosed(); err != nil {
 		return nil, err
 	}
 	m.amu.Lock()
 	defer m.amu.Unlock()
 	select {
-	case pa := <-m.acceptCh:
-		return m.Peer(pa.RemoteAddr), nil
+	case s := <-m.acceptCh:
+		return s, nil
 	case err := <-m.errorCh:
 		return nil, err
+	case <-m.die:
+		return nil, io.EOF
 	}
 }
 
-func (m *Mux) Peer(raddr *net.UDPAddr) *Peer {
-	if m.Closed() {
-		return nil
+func (m *Mux) Session(raddr *net.UDPAddr) (*Session, error) {
+	if err := m.errIfClosed(); err != nil {
+		return nil, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	addr := raddr.String()
-	p, ok := m.peers[addr]
+	s, ok := m.sessions[addr]
 	if !ok {
-		p = NewPeer(m, raddr)
-		m.peers[addr] = p
+		s = NewSession(m, raddr)
+		m.sessions[addr] = s
 	}
-	return p
+	return s, nil
+}
+
+func (m *Mux) Write(b []byte, raddr *net.UDPAddr) (int, error) {
+	return m.conn.WriteToUDP(b, raddr)
 }
 
 func (m *Mux) Closed() bool {
@@ -73,79 +90,85 @@ func (m *Mux) Closed() bool {
 	return m.closed
 }
 
+func (m *Mux) Close() error {
+	if err := m.errIfClosed(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.sessions {
+		if err := s.close(false, true); err != nil {
+			return err
+		}
+	}
+	if err := m.conn.Close(); err != nil {
+		return err
+	}
+	m.sessions = nil
+	m.closed = true
+	return nil
+}
+
 func (m *Mux) remove(addr string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.peers, addr)
-}
-
-func (m *Mux) write(raddr *net.UDPAddr, b []byte) (int, error) {
-	m.wmu.Lock()
-	defer m.wmu.Unlock()
-	return m.conn.WriteToUDP(b, raddr)
-}
-
-func (m *Mux) listen() {
-	if err := m.listenLoop(); err != nil {
-		log.Error(err)
+	if !m.closed {
+		delete(m.sessions, addr)
 	}
 }
 
-func (m *Mux) listenLoop() error {
-	defer m.close()
-	b := make([]byte, packetMaxSize)
+func (m *Mux) recv() {
+	if err := m.recvLoop(); err != nil {
+		m.errorCh <- err
+	}
+}
+
+func (m *Mux) recvLoop() error {
+	b := make([]byte, packetBufferSize)
 	for {
 		n, raddr, err := m.conn.ReadFromUDP(b)
 		if err != nil {
-			m.errorCh <- err
 			return err
 		}
-		fr, err := frame.Decode(b[:n])
+		f, err := frame.Decode(b[:n])
 		if err != nil {
-			// Silently ignore errors
+			// Silently ignore decode errors
 			continue
 		}
-		pa := NewPacket(*fr, raddr)
-		if pa.IsSYN() {
-			m.handleSYN(pa)
-		}
-		m.dispatch(pa)
+		m.dispatch(*f, raddr)
 	}
 }
 
-func (m *Mux) handleSYN(pa Packet) {
+func (m *Mux) dispatch(f frame.Frame, raddr *net.UDPAddr) {
+	if f.IsSYN() {
+		m.handleSYN(f, raddr)
+	} else {
+		m.handleStream(f, raddr)
+	}
+}
+
+func (m *Mux) handleSYN(f frame.Frame, raddr *net.UDPAddr) {
 	m.mu.RLock()
-	addr := pa.RemoteAddr.String()
-	_, ok := m.peers[addr]
+	addr := raddr.String()
+	s, ok := m.sessions[addr]
 	m.mu.RUnlock()
 	if !ok {
-		m.acceptCh <- pa
+		s = NewSession(m, raddr)
+		m.mu.Lock()
+		m.sessions[addr] = s
+		m.mu.Unlock()
+		m.acceptCh <- s
 	}
+	s.dispatch(f)
 }
 
-func (m *Mux) dispatch(pa Packet) {
+func (m *Mux) handleStream(f frame.Frame, raddr *net.UDPAddr) {
 	m.mu.RLock()
-	addr := pa.RemoteAddr.String()
-	p, ok := m.peers[addr]
+	s := m.sessions[raddr.String()]
 	m.mu.RUnlock()
-	if !ok {
-		return
+	if s != nil {
+		s.dispatch(f)
 	}
-	p.dispatch(pa)
-}
-
-func (m *Mux) close() {
-	if m.Closed() {
-		return
-	}
-	for _, p := range m.peers {
-		p.close(false)
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.conn = nil
-	m.peers = nil
-	m.closed = false
 }
 
 func (m *Mux) errIfClosed() error {

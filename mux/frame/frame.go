@@ -2,14 +2,15 @@ package frame
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 )
 
 const (
 	FlagSYN uint8 = 1 << iota
 	FlagACK
-	FlagFIN
 	FlagRST
+	FlagFIN
 )
 
 const (
@@ -86,4 +87,11 @@ func (f Frame) Bytes() []byte {
 		buf.Write(f.Data)
 	}
 	return buf.Bytes()
+}
+
+func (f Frame) String() string {
+	return fmt.Sprintf(
+		"Flags: %d, StreamID: %d, Length: %d",
+		f.Flags, f.StreamID, f.Length(),
+	)
 }
