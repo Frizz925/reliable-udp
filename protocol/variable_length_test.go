@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,10 +22,12 @@ func TestVariableLength(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		b, err := EncodeVariableLength(tc.expected)
-		require.Nil(err)
+		buf := &bytes.Buffer{}
+		require.Nil(WriteVariableLength(buf, tc.expected))
+		b := buf.Bytes()
 		require.Equal(tc.expectedLen, len(b))
-		actual, err := DecodeVariableLength(b)
+
+		actual, err := ReadVariableLength(bytes.NewBuffer(b))
 		require.Nil(err)
 		require.Equal(tc.expected, actual)
 	}

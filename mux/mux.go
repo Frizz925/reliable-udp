@@ -1,60 +1,35 @@
 package mux
 
 import (
-	"crypto/rsa"
 	"net"
-	"reliable-udp/mux/frame"
 	"sync"
 )
 
+const (
+	HandshakeBufferSize = 1024
+	ReadBufferSize      = 1024
+	WriteBufferSize     = 1024
+)
+
 type Mux struct {
-	conn     *net.UDPConn
-	privKey  *rsa.PrivateKey
-	sessions map[string]*Session
+	privateKey PrivateKey
 
-	mu sync.RWMutex
-
-	lastError error
+	listenLock sync.Mutex
 }
 
-func New(conn *net.UDPConn, privKey *rsa.PrivateKey) *Mux {
-	m := &Mux{
-		conn:     conn,
-		privKey:  privKey,
-		sessions: make(map[string]*Session),
+func New(pk PrivateKey) *Mux {
+	return &Mux{
+		privateKey: pk,
 	}
-	go m.recv()
-	return m
 }
 
-func (m *Mux) Error() error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.lastError
-}
-
-func (m *Mux) send(b []byte, raddr *net.UDPAddr) (int, error) {
-	return m.conn.WriteToUDP(b, raddr)
-}
-
-func (m *Mux) recv() {
-	b := make([]byte, 65535)
+func (m *Mux) Listen(l net.Listener) error {
+	m.listenLock.Lock()
+	defer m.listenLock.Unlock()
 	for {
-		n, raddr, err := m.conn.ReadFromUDP(b)
+		conn, err := l.Accept()
 		if err != nil {
-			m.mu.Lock()
-			m.lastError = err
-			m.mu.Unlock()
-			return
+			return err
 		}
-		f, err := frame.Decode(b[:n])
-		if err != nil {
-			// Silently ignore decode errors
-			continue
-		}
-		m.dispatch(*f, raddr)
 	}
-}
-
-func (m *Mux) dispatch(f frame.Frame, raddr *net.UDPAddr) {
 }

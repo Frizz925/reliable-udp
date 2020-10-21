@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"math"
@@ -22,11 +23,38 @@ const (
 	flagUint62
 )
 
-func EncodeVariableLength(length uint) ([]byte, error) {
-	if length > maxUint62 {
-		return nil, ErrVariableLengthOverflow
+func ReadVariableLength(r io.Reader) (uint, error) {
+	firstByte, err := ReadByte(r)
+	if err != nil {
+		return 0, err
 	}
-	b := make([]byte, 0)
+	flag := firstByte >> 6
+	firstByte &= maxUint6
+
+	var copyLen int64
+	switch flag {
+	case flagUint62:
+		copyLen = 7
+	case flagUint30:
+		copyLen = 3
+	case flagUint14:
+		copyLen = 1
+	default:
+		return uint(firstByte), nil
+	}
+
+	dst := bytes.NewBuffer([]byte{firstByte})
+	if _, err := io.CopyN(dst, r, copyLen); err != nil {
+		return 0, err
+	}
+	return BytesToUint(dst.Bytes()), nil
+}
+
+func WriteVariableLength(w io.Writer, length uint) error {
+	if length > maxUint62 {
+		return ErrVariableLengthOverflow
+	}
+	var b []byte
 	flag := flagUint6
 	switch {
 	case length <= maxUint6:
@@ -42,32 +70,5 @@ func EncodeVariableLength(length uint) ([]byte, error) {
 		flag = flagUint62
 	}
 	b[0] = byte((flag << 6) | (b[0] & maxUint6))
-	return b, nil
-}
-
-func DecodeVariableLength(b []byte) (uint, error) {
-	if len(b) < 1 {
-		return 0, io.ErrShortBuffer
-	}
-	flag := b[0] >> 6
-	b[0] = b[0] & maxUint6
-	switch flag {
-	case flagUint62:
-		if len(b) < 8 {
-			return 0, io.ErrShortBuffer
-		}
-		return uint(BytesToUint64(b)), nil
-	case flagUint30:
-		if len(b) < 4 {
-			return 0, io.ErrShortBuffer
-		}
-		return uint(BytesToUint32(b)), nil
-	case flagUint14:
-		if len(b) < 2 {
-			return 0, io.ErrShortBuffer
-		}
-		return uint(BytesToUint16(b)), nil
-	default:
-		return uint(b[0]), nil
-	}
+	return WriteFull(w, b)
 }
