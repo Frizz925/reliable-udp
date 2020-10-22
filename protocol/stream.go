@@ -1,6 +1,9 @@
 package protocol
 
-import "io"
+import (
+	"fmt"
+	"io"
+)
 
 type StreamID uint32
 
@@ -42,4 +45,8 @@ func (sf *StreamFrame) StreamID() StreamID {
 
 func (sf *StreamFrame) Serialize(w io.Writer) error {
 	return sf.sid.Serialize(w)
+}
+
+func (sf *StreamFrame) String() string {
+	return fmt.Sprintf("StreamFrame(StreamID: %d, Type: %d)", sf.sid, sf.ft)
 }

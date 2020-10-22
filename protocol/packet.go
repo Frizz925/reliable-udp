@@ -20,6 +20,14 @@ type Packet struct {
 	Frame
 }
 
+func NewBuffer() []byte {
+	return make([]byte, MaxPacketSize)
+}
+
+func EmptyBuffer() []byte {
+	return make([]byte, 0, MaxPacketSize)
+}
+
 func Deserialize(r io.Reader) (p Packet, err error) {
 	p.ConnectionID, err = ReadConnectionID(r)
 	if err != nil {
@@ -38,6 +46,10 @@ func Deserialize(r io.Reader) (p Packet, err error) {
 		return
 	}
 	return p, nil
+}
+
+func (p Packet) Nonce() Nonce {
+	return Uint32ToNonce(p.Sequence)
 }
 
 func (p Packet) Serialize(w io.Writer) error {

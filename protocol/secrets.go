@@ -20,7 +20,7 @@ type (
 	Nonce      [NonceSize]byte
 )
 
-// Reader can be nil to generate new private key from cryptographically secure random generator
+// Reader can be nil to generate new private key from cryptographically secure random generator.
 func ReadPrivateKey(r io.Reader) (priv PrivateKey, err error) {
 	if r == nil {
 		r = rand.Reader
@@ -29,7 +29,19 @@ func ReadPrivateKey(r io.Reader) (priv PrivateKey, err error) {
 }
 
 func (priv PrivateKey) PublicKey() (pub PublicKey, err error) {
-	b, err := curve25519.X25519(priv[:], curve25519.Basepoint)
+	return CreatePublicKey(priv[:])
+}
+
+func (priv PrivateKey) SharedSecret(pub PublicKey) ([]byte, error) {
+	return SharedSecret(priv[:], pub[:])
+}
+
+func (priv PrivateKey) Serialize(w io.Writer) error {
+	return WriteFull(w, priv[:])
+}
+
+func CreatePublicKey(key []byte) (pub PublicKey, err error) {
+	b, err := curve25519.X25519(key, curve25519.Basepoint)
 	if err != nil {
 		return pub, err
 	}
@@ -37,24 +49,20 @@ func (priv PrivateKey) PublicKey() (pub PublicKey, err error) {
 	return pub, nil
 }
 
-func (priv PrivateKey) SharedSecret(pub PublicKey) ([]byte, error) {
-	return curve25519.X25519(priv[:], pub[:])
-}
-
-func (priv PrivateKey) Serialize(w io.Writer) error {
-	return WriteFull(w, priv[:])
-}
-
 func ReadPublicKey(r io.Reader) (pub PublicKey, err error) {
 	return pub, ReadFull(r, pub[:])
 }
 
 func (pub PublicKey) SharedSecret(priv PrivateKey) ([]byte, error) {
-	return priv.SharedSecret(pub)
+	return SharedSecret(priv[:], pub[:])
 }
 
 func (pub PublicKey) Serialize(w io.Writer) error {
 	return WriteFull(w, pub[:])
+}
+
+func SharedSecret(k0, k1 []byte) ([]byte, error) {
+	return curve25519.X25519(k0, k1)
 }
 
 func Uint32ToNonce(v uint32) (n Nonce) {

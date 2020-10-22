@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 )
 
@@ -53,4 +54,8 @@ func (r *Raw) Serialize(w io.Writer) error {
 		return err
 	}
 	return WriteFull(w, r.content)
+}
+
+func (r *Raw) String() string {
+	return fmt.Sprintf("Raw(Type: %d, Length: %d)", r.ft, len(r.content))
 }

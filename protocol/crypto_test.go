@@ -30,7 +30,6 @@ func TestCrypto(t *testing.T) {
 	require.Equal(cout.ciphertext, cin.ciphertext)
 	require.Equal(cout.plaintext, cin.plaintext)
 
-	actual, err := cin.Frame()
-	require.Nil(err)
+	actual := cin.Frame()
 	require.Equal(expected, actual)
 }
