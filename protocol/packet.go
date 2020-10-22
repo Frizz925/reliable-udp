@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"bytes"
 	"io"
 )
 
@@ -34,54 +33,10 @@ func Deserialize(r io.Reader) (p Packet, err error) {
 	if err != nil {
 		return
 	}
-
-	ft, err := ReadFrameType(r)
+	p.Frame, err = ReadFrame(r)
 	if err != nil {
-		// If no frame type is read then return immediately
-		if err == io.EOF {
-			return p, nil
-		} else {
-			return p, err
-		}
+		return
 	}
-	fn, err := ReadVariableLength(r)
-	if err != nil {
-		return p, err
-	}
-	if fn > MaxPacketSize {
-		return p, bytes.ErrTooLarge
-	}
-
-	switch ft {
-	case FrameStreamOpen:
-		fallthrough
-	case FrameStreamReset:
-		fallthrough
-	case FrameStreamDataInit:
-		fallthrough
-	case FrameStreamDataAck:
-		fallthrough
-	case FrameStreamClose:
-		sid, err := ReadStreamID(r)
-		if err != nil {
-			return p, err
-		}
-		p.Frame = &BaseStreamFrame{
-			sid: sid,
-			ft:  ft,
-		}
-	default:
-		content := make([]byte, fn)
-		_, err := io.ReadFull(r, content)
-		if err != nil {
-			return p, err
-		}
-		p.Frame = &Raw{
-			ft:      ft,
-			content: content,
-		}
-	}
-
 	return p, nil
 }
 
@@ -98,18 +53,8 @@ func (p Packet) Serialize(w io.Writer) error {
 	if p.Frame == nil {
 		return nil
 	}
-
 	if err := p.Frame.Type().Serialize(w); err != nil {
 		return err
 	}
-
-	buf := &bytes.Buffer{}
-	if err := p.Frame.Serialize(buf); err != nil {
-		return err
-	}
-	if err := WriteVariableLength(w, uint(buf.Len())); err != nil {
-		return err
-	}
-	_, err := io.Copy(w, buf)
-	return err
+	return p.Frame.Serialize(w)
 }

@@ -1,5 +1,5 @@
 package protocol
 
 type StreamData struct {
-	BaseStreamFrame
+	StreamFrame
 }

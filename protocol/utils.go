@@ -5,16 +5,19 @@ import (
 	"io"
 )
 
+func ReadFull(r io.Reader, b []byte) error {
+	_, err := io.ReadFull(r, b)
+	return err
+}
+
 func ReadByte(r io.Reader) (byte, error) {
 	b := make([]byte, 1)
-	_, err := io.ReadFull(r, b)
-	return b[0], err
+	return b[0], ReadFull(r, b)
 }
 
 func ReadBytes(r io.Reader, n int) ([]byte, error) {
 	b := make([]byte, n)
-	_, err := io.ReadFull(r, b)
-	return b, err
+	return b, ReadFull(r, b)
 }
 
 func WriteFull(w io.Writer, b []byte) error {

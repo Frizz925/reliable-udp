@@ -6,6 +6,8 @@ type FrameType uint8
 
 const (
 	FrameUnknown FrameType = iota
+	FrameRaw
+	FrameCrypto
 	FrameStreamOpen
 	FrameStreamReset
 	FrameStreamDataInit

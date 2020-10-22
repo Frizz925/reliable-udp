@@ -16,20 +16,30 @@ func (sid StreamID) Serialize(w io.Writer) error {
 	return WriteUint32(w, uint32(sid))
 }
 
-type StreamFrame interface {
-	Frame
-	StreamID() StreamID
-}
-
-type BaseStreamFrame struct {
-	sid StreamID
+type StreamFrame struct {
 	ft  FrameType
+	sid StreamID
 }
 
-func (bsf *BaseStreamFrame) Type() FrameType {
-	return bsf.ft
+func ReadStreamFrame(r io.Reader, ft FrameType) (*StreamFrame, error) {
+	sid, err := ReadStreamID(r)
+	if err != nil {
+		return nil, err
+	}
+	return &StreamFrame{
+		ft:  ft,
+		sid: sid,
+	}, nil
 }
 
-func (bsf *BaseStreamFrame) Serialize(w io.Writer) error {
-	return bsf.sid.Serialize(w)
+func (sf *StreamFrame) Type() FrameType {
+	return sf.ft
+}
+
+func (sf *StreamFrame) StreamID() StreamID {
+	return sf.sid
+}
+
+func (sf *StreamFrame) Serialize(w io.Writer) error {
+	return sf.sid.Serialize(w)
 }

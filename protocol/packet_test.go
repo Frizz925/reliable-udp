@@ -13,12 +13,8 @@ func TestPacket(t *testing.T) {
 		ConnectionID: 1,
 		Sequence:     1,
 		Type:         PacketHandshake,
-		Frame: &BaseStreamFrame{
-			ft:  FrameStreamDataInit,
-			sid: 1,
-		},
+		Frame:        NewRaw(FrameRaw, []byte("Hello, world!")),
 	}
-
 	buf := &bytes.Buffer{}
 	require.Nil(expected.Serialize(buf))
 	actual, err := Deserialize(buf)

@@ -1,8 +1,49 @@
 package protocol
 
-import "io"
+import (
+	"io"
+)
+
+type Serializer interface {
+	Serialize(w io.Writer) error
+}
 
 type Frame interface {
+	Serializer
 	Type() FrameType
-	Serialize(w io.Writer) error
+}
+
+// ReadFrame may return nil Frame without error if it doesn't read any frame type.
+func ReadFrame(r io.Reader) (Frame, error) {
+	ft, err := ReadFrameType(r)
+	if err != nil {
+		// If no frame type is read then return immediately
+		if err == io.EOF {
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	switch ft {
+	case FrameStreamOpen:
+		fallthrough
+	case FrameStreamReset:
+		fallthrough
+	case FrameStreamDataInit:
+		fallthrough
+	case FrameStreamDataAck:
+		fallthrough
+	case FrameStreamClose:
+		return ReadStreamFrame(r, ft)
+	default:
+		return ReadRaw(r, ft)
+	}
+}
+
+func WriteFrame(w io.Writer, f Frame) error {
+	if err := f.Type().Serialize(w); err != nil {
+		return err
+	}
+	return f.Serialize(w)
 }
