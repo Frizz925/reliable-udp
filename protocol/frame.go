@@ -26,16 +26,24 @@ func ReadFrame(r io.Reader) (Frame, error) {
 	}
 
 	switch ft {
+	case FrameHandshakeAck:
+		fallthrough
+	case FrameHandshake:
+		return ReadHandshake(r, ft)
 	case FrameStreamOpen:
+		fallthrough
+	case FrameStreamAck:
 		fallthrough
 	case FrameStreamReset:
 		fallthrough
-	case FrameStreamDataInit:
-		fallthrough
-	case FrameStreamDataAck:
-		fallthrough
 	case FrameStreamClose:
 		return ReadStreamFrame(r, ft)
+	case FrameStreamData:
+		return ReadStreamData(r)
+	case FrameStreamDataAck:
+		return ReadStreamDataAck(r)
+	case FrameStreamDataFin:
+		return ReadStreamDataFin(r)
 	default:
 		return ReadRaw(r, ft)
 	}

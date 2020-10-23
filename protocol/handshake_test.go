@@ -17,13 +17,16 @@ func TestHandshake(t *testing.T) {
 	pubKey, err := privKey.PublicKey()
 	require.Nil(err)
 
-	expected := &Handshake{
+	expected := Handshake{
+		FrameType:  FrameHandshake,
 		BufferSize: 1024,
 		PublicKey:  pubKey,
 	}
 	buf := &bytes.Buffer{}
 	require.Nil(expected.Serialize(buf))
-	actual, err := ReadHandshake(buf)
+	actual, err := ReadHandshake(buf, expected.FrameType)
 	require.Nil(err)
+	// Skip check for maxframesize
+	expected.MaxFrameSize = actual.MaxFrameSize
 	require.Equal(expected, actual)
 }

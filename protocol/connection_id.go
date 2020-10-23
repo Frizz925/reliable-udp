@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"crypto/rand"
+	"fmt"
 	"io"
 )
 
@@ -21,4 +22,8 @@ func GenerateConnectionID() (ConnectionID, error) {
 
 func (cid ConnectionID) Serialize(w io.Writer) error {
 	return WriteUint64(w, uint64(cid))
+}
+
+func (cid ConnectionID) String() string {
+	return fmt.Sprintf("%d", cid)
 }

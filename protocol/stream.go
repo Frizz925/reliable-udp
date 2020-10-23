@@ -19,34 +19,47 @@ func (sid StreamID) Serialize(w io.Writer) error {
 	return WriteUint32(w, uint32(sid))
 }
 
-type StreamFrame struct {
+func (sid StreamID) String() string {
+	return fmt.Sprintf("%d", sid)
+}
+
+type StreamFrame interface {
+	Frame
+	StreamID() StreamID
+}
+
+type baseStreamFrame struct {
 	ft  FrameType
 	sid StreamID
 }
 
-func ReadStreamFrame(r io.Reader, ft FrameType) (*StreamFrame, error) {
+func NewStreamFrame(ft FrameType, sid StreamID) StreamFrame {
+	return baseStreamFrame{
+		sid: sid,
+		ft:  ft,
+	}
+}
+
+func ReadStreamFrame(r io.Reader, ft FrameType) (StreamFrame, error) {
 	sid, err := ReadStreamID(r)
 	if err != nil {
 		return nil, err
 	}
-	return &StreamFrame{
-		ft:  ft,
-		sid: sid,
-	}, nil
+	return NewStreamFrame(ft, sid), nil
 }
 
-func (sf *StreamFrame) Type() FrameType {
-	return sf.ft
+func (bsf baseStreamFrame) Type() FrameType {
+	return bsf.ft
 }
 
-func (sf *StreamFrame) StreamID() StreamID {
-	return sf.sid
+func (bsf baseStreamFrame) StreamID() StreamID {
+	return bsf.sid
 }
 
-func (sf *StreamFrame) Serialize(w io.Writer) error {
-	return sf.sid.Serialize(w)
+func (bsf baseStreamFrame) Serialize(w io.Writer) error {
+	return bsf.sid.Serialize(w)
 }
 
-func (sf *StreamFrame) String() string {
-	return fmt.Sprintf("StreamFrame(StreamID: %d, Type: %d)", sf.sid, sf.ft)
+func (bsf baseStreamFrame) String() string {
+	return fmt.Sprintf("StreamFrame(StreamID: %d, FrameType: %+v)", bsf.sid, bsf.ft)
 }

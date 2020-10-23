@@ -7,8 +7,8 @@ type PacketType uint8
 const (
 	PacketNone PacketType = iota
 	PacketHandshake
-	PacketStream
 	PacketTerminate
+	PacketStream
 )
 
 func ReadPacketType(r io.Reader) (PacketType, error) {

@@ -8,11 +8,14 @@ const (
 	FrameUnknown FrameType = iota
 	FrameRaw
 	FrameCrypto
+	FrameHandshake
+	FrameHandshakeAck
 	FrameStreamOpen
+	FrameStreamAck
 	FrameStreamReset
-	FrameStreamDataInit
 	FrameStreamData
 	FrameStreamDataAck
+	FrameStreamDataFin
 	FrameStreamClose
 )
 

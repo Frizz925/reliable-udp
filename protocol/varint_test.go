@@ -12,7 +12,7 @@ type variableLengthTestCase struct {
 	expectedLen int
 }
 
-func TestVariableLength(t *testing.T) {
+func TestVarInt(t *testing.T) {
 	require := require.New(t)
 	testCases := []variableLengthTestCase{
 		{maxUint6, 1},
@@ -23,11 +23,11 @@ func TestVariableLength(t *testing.T) {
 
 	for _, tc := range testCases {
 		buf := &bytes.Buffer{}
-		require.Nil(WriteVariableLength(buf, tc.expected))
+		require.Nil(WriteVarInt(buf, tc.expected))
 		b := buf.Bytes()
 		require.Equal(tc.expectedLen, len(b))
 
-		actual, err := ReadVariableLength(bytes.NewBuffer(b))
+		actual, err := ReadVarInt(bytes.NewReader(b))
 		require.Nil(err)
 		require.Equal(tc.expected, actual)
 	}

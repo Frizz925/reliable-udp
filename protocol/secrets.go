@@ -3,6 +3,7 @@ package protocol
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"io"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -25,7 +26,12 @@ func ReadPrivateKey(r io.Reader) (priv PrivateKey, err error) {
 	if r == nil {
 		r = rand.Reader
 	}
-	return priv, ReadFull(r, priv[:])
+	err = ReadFull(r, priv[:])
+	if err != nil {
+		return
+	}
+	priv.clamp()
+	return priv, nil
 }
 
 func (priv PrivateKey) PublicKey() (pub PublicKey, err error) {
@@ -38,6 +44,15 @@ func (priv PrivateKey) SharedSecret(pub PublicKey) ([]byte, error) {
 
 func (priv PrivateKey) Serialize(w io.Writer) error {
 	return WriteFull(w, priv[:])
+}
+
+func (priv PrivateKey) String() string {
+	return "--PRIVATE KEY--"
+}
+
+func (priv PrivateKey) clamp() {
+	priv[0] &= 248
+	priv[31] = (priv[31] & 127) | 64
 }
 
 func CreatePublicKey(key []byte) (pub PublicKey, err error) {
@@ -61,12 +76,20 @@ func (pub PublicKey) Serialize(w io.Writer) error {
 	return WriteFull(w, pub[:])
 }
 
+func (pub PublicKey) String() string {
+	return hex.EncodeToString(pub[:])
+}
+
 func SharedSecret(k0, k1 []byte) ([]byte, error) {
 	return curve25519.X25519(k0, k1)
 }
 
 func Uint32ToNonce(v uint32) (n Nonce) {
-	// We use little-endian for nonce
-	binary.LittleEndian.PutUint32(n[:], v)
+	binary.LittleEndian.PutUint32(n[8:], v)
+	return n
+}
+
+func Uint64ToNonce(v uint64) (n Nonce) {
+	binary.LittleEndian.PutUint64(n[4:], v)
 	return n
 }

@@ -7,7 +7,7 @@ import (
 	"math"
 )
 
-var ErrVariableLengthOverflow = errors.New("variable length overflow")
+var ErrVarIntOverflow = errors.New("variable v overflow")
 
 const (
 	maxUint6  = math.MaxUint8 / 4
@@ -23,7 +23,7 @@ const (
 	flagUint62
 )
 
-func ReadVariableLength(r io.Reader) (uint, error) {
+func ReadVarInt(r io.Reader) (uint, error) {
 	firstByte, err := ReadByte(r)
 	if err != nil {
 		return 0, err
@@ -50,23 +50,23 @@ func ReadVariableLength(r io.Reader) (uint, error) {
 	return BytesToUint(dst.Bytes()), nil
 }
 
-func WriteVariableLength(w io.Writer, length uint) error {
-	if length > maxUint62 {
-		return ErrVariableLengthOverflow
+func WriteVarInt(w io.Writer, v uint) error {
+	if v > maxUint62 {
+		return ErrVarIntOverflow
 	}
 	var b []byte
 	flag := flagUint6
 	switch {
-	case length <= maxUint6:
-		b = []byte{byte(length)}
-	case length <= maxUint14:
-		b = Uint16ToBytes(uint16(length))
+	case v <= maxUint6:
+		b = []byte{byte(v)}
+	case v <= maxUint14:
+		b = Uint16ToBytes(uint16(v))
 		flag = flagUint14
-	case length <= maxUint30:
-		b = Uint32ToBytes(uint32(length))
+	case v <= maxUint30:
+		b = Uint32ToBytes(uint32(v))
 		flag = flagUint30
 	default:
-		b = Uint64ToBytes(uint64(length))
+		b = Uint64ToBytes(uint64(v))
 		flag = flagUint62
 	}
 	b[0] = byte((flag << 6) | (b[0] & maxUint6))
