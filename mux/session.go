@@ -1,7 +1,6 @@
 package mux
 
 import (
-	"crypto/cipher"
 	"errors"
 	"fmt"
 	"net"
@@ -9,8 +8,6 @@ import (
 	"reliable-udp/util"
 	"sync"
 	"sync/atomic"
-
-	log "github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -29,11 +26,11 @@ type SessionConfig struct {
 
 type Session struct {
 	cfg SessionConfig
+	cid protocol.ConnectionID
 
-	mux  *Mux
-	cid  protocol.ConnectionID
-	aead cipher.AEAD
-	seq  uint32
+	mux    *Mux
+	crypto *protocol.CryptoFacade
+	seq    uint32
 
 	streams struct {
 		sync.RWMutex
@@ -54,11 +51,13 @@ func NewSession(mux *Mux, cfg SessionConfig) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	maxFrameSize := cfg.maxFrameSize - aead.NonceSize() - aead.Overhead()
+	crypto := protocol.NewCryptoFacade(aead, maxFrameSize)
 	s := &Session{
-		cfg:  cfg,
-		cid:  cfg.cid,
-		mux:  mux,
-		aead: aead,
+		cfg:    cfg,
+		cid:    cfg.cid,
+		mux:    mux,
+		crypto: crypto,
 	}
 
 	s.streams.idMap = make(map[protocol.StreamID]*Stream)
@@ -161,16 +160,12 @@ func (s *Session) nextId() uint32 {
 	return atomic.AddUint32(&s.streams.id, 1)
 }
 
-func (s *Session) decrypt(raw protocol.Raw, nonce protocol.Nonce) (protocol.Frame, error) {
-	cf, err := protocol.DecryptFrame(s.aead, nonce, raw)
-	if err != nil {
-		return nil, err
-	}
-	return cf.Frame(), nil
+func (s *Session) decrypt(crypto protocol.Crypto, nonce protocol.Nonce) (protocol.Frame, error) {
+	return s.crypto.Decrypt(crypto, nonce)
 }
 
 func (s *Session) encrypt(frame protocol.Frame, nonce protocol.Nonce) (protocol.Crypto, error) {
-	return protocol.EncryptFrame(s.aead, nonce, frame)
+	return s.crypto.Encrypt(frame, nonce)
 }
 
 func (s *Session) dispatch(frame protocol.Frame) {

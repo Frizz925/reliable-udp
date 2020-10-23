@@ -44,8 +44,14 @@ func ReadFrame(r io.Reader) (Frame, error) {
 		return ReadStreamDataAck(r)
 	case FrameStreamDataFin:
 		return ReadStreamDataFin(r)
+	case FrameCrypto:
+		return ReadCrypto(r)
 	default:
-		return ReadRaw(r, ft)
+		b, err := ReadRaw(r)
+		if err != nil {
+			return nil, err
+		}
+		return NewRaw(ft, b), nil
 	}
 }
 

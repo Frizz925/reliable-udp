@@ -18,17 +18,26 @@ func NewRaw(ft FrameType, b []byte) Raw {
 	}
 }
 
-func ReadRaw(r io.Reader, ft FrameType) (raw Raw, err error) {
-	raw.ft = ft
+func ReadRaw(r io.Reader) ([]byte, error) {
 	fn, err := ReadVarInt(r)
 	if err != nil {
-		return raw, err
+		return nil, err
 	}
 	if fn > MaxPacketSize {
-		return raw, bytes.ErrTooLarge
+		return nil, bytes.ErrTooLarge
 	}
-	raw.content, err = ReadBytes(r, int(fn))
-	return raw, err
+	return ReadBytes(r, int(fn))
+}
+
+func WriteRaw(w io.Writer, b []byte) error {
+	fn := uint(len(b))
+	if fn > MaxPacketSize {
+		return bytes.ErrTooLarge
+	}
+	if err := WriteVarInt(w, fn); err != nil {
+		return err
+	}
+	return WriteFull(w, b)
 }
 
 func (r Raw) Type() FrameType {
@@ -44,14 +53,7 @@ func (r Raw) Reader() io.Reader {
 }
 
 func (r Raw) Serialize(w io.Writer) error {
-	fn := uint(len(r.content))
-	if fn > MaxPacketSize {
-		return bytes.ErrTooLarge
-	}
-	if err := WriteVarInt(w, fn); err != nil {
-		return err
-	}
-	return WriteFull(w, r.content)
+	return WriteRaw(w, r.content)
 }
 
 func (r Raw) String() string {

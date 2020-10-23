@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 )
@@ -34,6 +35,12 @@ func WriteFull(w io.Writer, b []byte) error {
 
 func WriteByte(w io.Writer, v byte) error {
 	return WriteFull(w, []byte{v})
+}
+
+func CopyBuffer(buf *bytes.Buffer) []byte {
+	b := make([]byte, buf.Len())
+	copy(b, buf.Bytes())
+	return b
 }
 
 func BytesToUint16(b []byte) (uint16, error) {

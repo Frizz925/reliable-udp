@@ -8,11 +8,11 @@ import (
 	"hash"
 	"io"
 	"net"
+	"reflect"
 	"reliable-udp/protocol"
 	"reliable-udp/util"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/hkdf"
 )
@@ -319,15 +319,19 @@ func (m *Mux) routineDeserialize() {
 
 			// Decrypt if we have handshaked session and it's a crypto frame
 			if sessionExists && packet.Frame != nil && packet.Frame.Type() == protocol.FrameCrypto {
-				raw, ok := packet.Frame.(protocol.Raw)
+				crypto, ok := packet.Frame.(protocol.Crypto)
 				if !ok {
 					// We shouldn't be able to get here
 					// Since crypto frames should be deserialized into raw frames
-					log.Errorf("Received crypto frame should deserialized into raw frame: %+v", packet.Frame)
+					t := reflect.TypeOf(packet.Frame)
+					log.Errorf(
+						"Expected frame with crypto type to be deserialized into Crypto frame, got %s frame instead: %+v",
+						t.Name(), packet.Frame,
+					)
 					continue
 				}
 				nonce := packet.Nonce()
-				frame, err := session.decrypt(raw, nonce)
+				frame, err := session.decrypt(crypto, nonce)
 				if err != nil {
 					log.Errorf("Failed to decrypt crypto frame: %+v", err)
 					continue
@@ -417,7 +421,7 @@ func (m *Mux) routineSerialize() {
 			m.sessions.RUnlock()
 
 			frame := packet.Frame
-			if v, ok := frame.(LazyCrypto); ok {
+			if v, ok := frame.(DeferCrypto); ok {
 				if !sessionExists {
 					// For security reasons we drop the outbound packet if somehow
 					// we're trying to send packet with (to be) encrypted frame
@@ -468,7 +472,7 @@ func (m *Mux) routineWrite(conn *net.UDPConn) {
 }
 
 func (m *Mux) handleHandshake(cid protocol.ConnectionID, hs protocol.Handshake) {
-	log.Debugf("Received handshake, CID: %d, Frame: %+v", cid, hs)
+	log.Debugf("Received handshake: CID(%d) %+v", cid, hs)
 	isAck := hs.Type() == protocol.FrameHandshakeAck
 
 	m.sessions.RLock()

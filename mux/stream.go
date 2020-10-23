@@ -10,8 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -240,7 +238,7 @@ func (conn *Stream) String() string {
 }
 
 func (conn *Stream) send(frame protocol.Frame) {
-	conn.session.SendStream(CryptoFrame(frame))
+	conn.session.SendStream(WithDeferCrypto(frame))
 }
 
 func (conn *Stream) recv(types ...protocol.FrameType) (protocol.Frame, error) {

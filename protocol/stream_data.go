@@ -20,7 +20,7 @@ func NewStreamData(sid StreamID, offset uint32, data []byte) StreamData {
 }
 
 func ReadStreamData(r io.Reader) (sd StreamData, err error) {
-	var n int
+	var length uint
 	sd.StreamFrame, err = ReadStreamFrame(r, FrameStreamData)
 	if err != nil {
 		return
@@ -29,13 +29,12 @@ func ReadStreamData(r io.Reader) (sd StreamData, err error) {
 	if err != nil {
 		return
 	}
-	b := NewBuffer()
-	n, err = r.Read(b)
+	length, err = ReadVarInt(r)
 	if err != nil {
 		return
 	}
-	sd.Data = b[:n]
-	return sd, nil
+	sd.Data, err = ReadBytes(r, int(length))
+	return sd, err
 }
 
 func (sd StreamData) Serialize(w io.Writer) error {
@@ -45,11 +44,11 @@ func (sd StreamData) Serialize(w io.Writer) error {
 	if err := WriteUint32(w, sd.Offset); err != nil {
 		return err
 	}
-	var err error
-	if len(sd.Data) > 0 {
-		err = WriteFull(w, sd.Data)
+	dlen := len(sd.Data)
+	if err := WriteVarInt(w, uint(dlen)); err != nil {
+		return err
 	}
-	return err
+	return WriteFull(w, sd.Data)
 }
 
 func (sd StreamData) String() string {

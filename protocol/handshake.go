@@ -25,6 +25,7 @@ func ReadHandshake(r io.Reader, ft FrameType) (hs Handshake, err error) {
 	if err != nil {
 		return
 	}
+	//
 	// Read the rest of the padding to determine the maximum frame size
 	b := make([]byte, MaxPacketSize)
 	hs.MaxFrameSize, err = r.Read(b)
@@ -42,11 +43,11 @@ func (hs Handshake) Serialize(w io.Writer) error {
 	if err := hs.PublicKey.Serialize(w); err != nil {
 		return err
 	}
+	paddingSize := MaxPacketSize
 	buf, ok := w.(*bytes.Buffer)
-	if !ok {
-		return nil
+	if ok {
+		paddingSize -= buf.Len()
 	}
-	paddingSize := MaxPacketSize - buf.Len()
 	return WriteFull(w, make([]byte, paddingSize))
 }
 
