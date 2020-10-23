@@ -12,6 +12,7 @@ import (
 	"reliable-udp/protocol"
 	"reliable-udp/util"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/hkdf"
@@ -24,8 +25,9 @@ const (
 )
 
 var (
-	ErrMuxClosed      = errors.New("mux closed")
-	ErrMuxInterrupted = errors.New("mux interrupted")
+	ErrMuxClosed        = errors.New("mux closed")
+	ErrMuxInterrupted   = errors.New("mux interrupted")
+	ErrHandshakeTimeout = errors.New("handshake timeout")
 )
 
 type Inbound struct {
@@ -179,9 +181,14 @@ func (m *Mux) OpenSession(raddr *net.UDPAddr) (*Session, error) {
 		return nil, err
 	}
 
+	// TODO: Make this configurable
+	timeout := time.After(15 * time.Second)
+
 	select {
 	case session := <-ch:
 		return session, nil
+	case <-timeout:
+		return nil, ErrHandshakeTimeout
 	case <-m.die:
 		return nil, ErrMuxInterrupted
 	}
@@ -356,13 +363,11 @@ func (m *Mux) routineDemux() {
 			cid := packet.ConnectionID
 			log.Debugf("Received packet: %+v", packet)
 
-			if packet.Type != protocol.PacketHandshake {
-				m.sessions.RLock()
-				ps, ok := m.sessions.idMap[cid]
-				m.sessions.RUnlock()
-				if ok {
-					ps.dispatch(packet.Frame)
-				}
+			m.sessions.RLock()
+			session, sessionExists := m.sessions.idMap[cid]
+			m.sessions.RUnlock()
+			if sessionExists {
+				session.dispatch(packet.Frame)
 				continue
 			}
 

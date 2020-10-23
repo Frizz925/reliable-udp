@@ -3,11 +3,9 @@ package main
 import (
 	"fmt"
 	"net"
-	"os"
-	"os/signal"
 	"reliable-udp/mux"
 	"reliable-udp/protocol"
-	"syscall"
+	"reliable-udp/util"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -40,10 +38,7 @@ func start() error {
 	defer mc.Close()
 	clientWorker(mc, raddr)
 
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-	sig := <-ch
-	log.Infof("Received signal %+v", sig)
+	log.Infof("Received signal %+v", util.WaitForSignal())
 
 	return nil
 }
