@@ -26,8 +26,6 @@ func ReadFrame(r io.Reader) (Frame, error) {
 	}
 
 	switch ft {
-	case FrameHandshakeAck:
-		fallthrough
 	case FrameHandshake:
 		return ReadHandshake(r, ft)
 	case FrameStreamOpen:

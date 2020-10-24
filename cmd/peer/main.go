@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"reliable-udp/mux"
 	"reliable-udp/peer"
 	"reliable-udp/protocol"
@@ -34,6 +35,7 @@ func start() error {
 }
 
 func init() {
+	log.SetOutput(os.Stderr)
 	log.SetLevel(log.DebugLevel)
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp: true,

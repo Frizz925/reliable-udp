@@ -9,7 +9,6 @@ const (
 	FrameRaw
 	FrameCrypto
 	FrameHandshake
-	FrameHandshakeAck
 	FrameStreamOpen
 	FrameStreamAck
 	FrameStreamReset

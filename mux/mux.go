@@ -177,21 +177,25 @@ func (m *Mux) OpenSession(raddr *net.UDPAddr) (*Session, error) {
 		close(ch)
 	}()
 
-	if err := m.sendHandshake(cid, 1, pub, false); err != nil {
-		return nil, err
-	}
-
 	// TODO: Make this configurable
-	timeout := time.After(15 * time.Second)
-
-	select {
-	case session := <-ch:
-		return session, nil
-	case <-timeout:
-		return nil, ErrHandshakeTimeout
-	case <-m.die:
-		return nil, ErrMuxInterrupted
+	interval := 3 * time.Second
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for seq := uint32(0); seq < 10; seq++ {
+		err := m.sendHandshake(cid, seq+1, pub)
+		if err != nil {
+			return nil, err
+		}
+		select {
+		case session := <-ch:
+			return session, nil
+		case <-ticker.C:
+			continue
+		case <-m.die:
+			return nil, ErrMuxInterrupted
+		}
 	}
+	return nil, ErrHandshakeTimeout
 }
 
 func (m *Mux) AcceptSession() (*Session, error) {
@@ -478,7 +482,6 @@ func (m *Mux) routineWrite(conn *net.UDPConn) {
 
 func (m *Mux) handleHandshake(cid protocol.ConnectionID, hs protocol.Handshake) {
 	log.Debugf("Received handshake: CID(%d) %+v", cid, hs)
-	isAck := hs.Type() == protocol.FrameHandshakeAck
 
 	m.sessions.RLock()
 	state, stateExists := m.sessions.hsMap[cid]
@@ -515,11 +518,8 @@ func (m *Mux) handleHandshake(cid protocol.ConnectionID, hs protocol.Handshake) 
 
 	m.sessions.Lock()
 	m.sessions.idMap[cid] = session
-	if isAck {
-		// Notify the handshake caller of the new session
-		if stateExists {
-			state.Result <- session
-		}
+	if stateExists {
+		state.Result <- session
 		m.sessions.Unlock()
 		return
 	}
@@ -539,20 +539,16 @@ func (m *Mux) handleHandshake(cid protocol.ConnectionID, hs protocol.Handshake) 
 	}
 
 	// If the handshake packet we get is peer-initiated one, we need to respond with handshake ack
-	if err := m.sendHandshake(cid, session.nextSeq(), pub, true); err != nil {
+	if err := m.sendHandshake(cid, session.nextSeq(), pub); err != nil {
 		log.Errorf("Failed to send handshake ack: %+v", err)
 	}
 }
 
-func (m *Mux) sendHandshake(cid protocol.ConnectionID, seq uint32, pub protocol.PublicKey, isAck bool) error {
+func (m *Mux) sendHandshake(cid protocol.ConnectionID, seq uint32, pub protocol.PublicKey) error {
 	hs := protocol.Handshake{
 		BufferSize: StreamBufferSize,
+		FrameType:  protocol.FrameHandshake,
 		PublicKey:  pub,
-	}
-	if isAck {
-		hs.FrameType = protocol.FrameHandshakeAck
-	} else {
-		hs.FrameType = protocol.FrameHandshake
 	}
 	packet := protocol.Packet{
 		ConnectionID: cid,
